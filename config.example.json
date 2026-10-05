@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "providers": [
+    {
+      "id": "claude",
+      "enabled": true,
+      "source": "cli",
+      "cookieSource": "off"
+    },
+    {
+      "id": "openrouter",
+      "enabled": true,
+      "source": "api"
+    }
+  ]
+}

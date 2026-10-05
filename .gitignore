@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.log
+*.new
+.env
+.env.*
+config.cli.json
+.ui-backups/
+.openrouter-backups/
+*.csv
+*.jsonl
+.DS_Store
+
