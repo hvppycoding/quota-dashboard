@@ -142,7 +142,7 @@ def read_openrouter(*, enabled=False):
         except (ValueError, UnicodeError):
             raise ValueError('openrouter_usage_unavailable') from None
         observation = project_openrouter(rows)
-        observation['activity'] = read_activity()
+        observation['activity'] = read_activity(primary_key=key, config_path=Path(__file__).with_name('config.cli.json'))
         return observation
     finally:
         if process.poll() is None:

@@ -11,6 +11,7 @@ import time
 
 from collector import read_codex, read_claude, utc_now, iso
 from openrouter import read_openrouter, public_metrics
+from manual import manual_claude_reset_tickets
 
 REFRESH_SECONDS = 300
 STALE_SECONDS = 600
@@ -54,6 +55,9 @@ def build_payload(observation, attempted_at, failed, now, claude_observation=Non
             row={k:w[k] for k in ('label','usedPercent','remainingPercent','windowMinutes','resetAt')}
             row['resetPassed']=dt.datetime.fromisoformat(row['resetAt'].replace('Z','+00:00'))<=now
             claude['windows'].append(row)
+    manual_ticket = manual_claude_reset_tickets(Path(__file__).with_name('manual-overrides.json'), now)
+    if manual_ticket is not None:
+        claude['manualResetTickets'] = manual_ticket
     rows.append(claude)
     openrouter={'id':'openrouter','name':'OpenRouter','status':'waiting' if openrouter_enabled else 'not_connected','observedAt':None,'lastAttemptAt':openrouter_attempt,'stale':openrouter_enabled,'windows':[]}
     if openrouter_enabled and openrouter_observation is not None:

@@ -3,6 +3,7 @@ import datetime as dt
 import json
 import math
 import os
+from pathlib import Path
 import urllib.error
 import urllib.request
 
@@ -26,7 +27,17 @@ def project_activity(rows, now):
     for row in rows:
         if not isinstance(row, dict):
             raise ValueError('invalid_activity')
-        date = row.get('date')
+        raw_date = row.get('date')
+        if not isinstance(raw_date, str) or len(raw_date) > 40:
+            raise ValueError('invalid_activity_date')
+        try:
+            stamp = dt.datetime.fromisoformat(raw_date.replace('Z', '+00:00'))
+        except ValueError:
+            raise ValueError('invalid_activity_date') from None
+        # Activity reports UTC day boundaries, including timezone-free SQL timestamps.
+        if stamp.tzinfo is None:
+            stamp = stamp.replace(tzinfo=dt.timezone.utc)
+        date = stamp.astimezone(dt.timezone.utc).date().isoformat()
         if date not in daily:
             continue
         model = row.get('model')
@@ -57,10 +68,31 @@ def project_activity(rows, now):
                                              for _, members in groups]} for date in dates]}
 
 
-def read_activity():
-    key = os.environ.get('OPENROUTER_MANAGEMENT_KEY')
+def activity_key(primary_key=None, config_path=None):
+    # Follow CodexBar's configured management-key precedence. Never persist keys.
+    if config_path is not None:
+        try:
+            config = json.loads(Path(config_path).read_text())
+            for provider in config.get('providers', []):
+                if provider.get('id') == 'openrouter':
+                    key = (provider.get('pluginSecrets') or {}).get('OPENROUTER_MANAGEMENT_API_KEY')
+                    if isinstance(key, str) and key.strip():
+                        return key.strip()
+        except (OSError, ValueError, TypeError, AttributeError):
+            pass
+    for name in ('OPENROUTER_MANAGEMENT_API_KEY', 'OPENROUTER_MANAGEMENT_KEY'):
+        key = os.environ.get(name)
+        if key and key.strip():
+            return key.strip()
+    # CodexBar also accepts a management key in the primary API-key field.
+    key = primary_key or os.environ.get('OPENROUTER_API_KEY')
+    return key.strip() if isinstance(key, str) and key.strip() else None
+
+
+def read_activity(primary_key=None, config_path=None):
+    key = activity_key(primary_key, config_path)
     if not key:
-        return {'status': 'access_required'}
+        return {'status': 'credential_missing'}
     request = urllib.request.Request('https://openrouter.ai/api/v1/activity',
                                      headers={'Authorization': 'Bearer ' + key, 'Accept': 'application/json'})
     try:
@@ -70,6 +102,7 @@ def read_activity():
             raise ValueError('activity_response_limit')
         return project_activity(json.loads(raw).get('data'), dt.datetime.now(dt.timezone.utc))
     except urllib.error.HTTPError as error:
-        return {'status': 'access_required' if error.code in (401, 403) else 'unavailable'}
+        status = {401: 'authentication_failed', 403: 'permission_denied'}.get(error.code, 'unavailable')
+        return {'status': status}
     except (OSError, ValueError, TypeError, AttributeError):
         return {'status': 'unavailable'}
